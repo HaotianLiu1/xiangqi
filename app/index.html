@@ -3,22 +3,48 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>离线象棋原型</title>
+  <title>离线象棋 MVP</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <h1>离线象棋（原型）</h1>
-  <div class="controls">
-    <label>难度
-      <select id="difficulty">
-        <option>简单</option><option>中等</option><option>困难</option>
-      </select>
-    </label>
-    <label>悔棋次数 <input id="undoLimit" type="number" min="0" max="99" value="1" /></label>
-    <button id="start">开始新局</button>
-  </div>
-  <p id="status">已初始化（离线模式）</p>
-  <div id="board"></div>
+  <main class="app">
+    <header>
+      <h1>离线象棋 MVP</h1>
+      <p class="subtitle">棋盘 UI / 难度三档 / 开局前悔棋配置 / 状态提示</p>
+    </header>
+
+    <section class="panel setup-panel">
+      <h2>开局设置</h2>
+      <div class="controls">
+        <label>难度
+          <select id="difficulty">
+            <option value="简单">简单</option>
+            <option value="中等" selected>中等</option>
+            <option value="困难">困难</option>
+          </select>
+        </label>
+        <label>悔棋次数（开局前设置）
+          <input id="undoLimit" type="number" min="0" max="99" step="1" value="1" />
+        </label>
+        <button id="start">开始新局</button>
+        <button id="reset" class="secondary">重置设置</button>
+      </div>
+      <p class="hint">开局后将锁定“难度/悔棋配置”；重开新局可重新配置。</p>
+    </section>
+
+    <section class="panel game-panel">
+      <div class="game-toolbar">
+        <button id="undo" class="secondary" disabled>悔棋</button>
+        <button id="switchTurn" class="secondary" disabled>切换回合（演示）</button>
+      </div>
+
+      <div class="meta" id="meta"></div>
+      <p id="status" class="status" role="status" aria-live="polite">等待开局：请先选择难度并设置悔棋次数。</p>
+
+      <div id="board" class="board" aria-label="中国象棋棋盘"></div>
+    </section>
+  </main>
+
   <script src="./main.js"></script>
 </body>
 </html>
