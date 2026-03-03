@@ -182,3 +182,24 @@ test('detectCheck: facing generals should be detected', () => {
   assert.equal(result.inCheck, true);
   assert.equal(result.attackers.some((a) => a.mode === 'general_facing'), true);
 });
+
+test('applyMove: should reject move that leaves own general in check', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [
+      { id: 'r-general', side: 'red', type: PIECE_TYPE.GENERAL, x: 4, y: 9 },
+      { id: 'r-rook', side: 'red', type: PIECE_TYPE.ROOK, x: 4, y: 8 },
+      { id: 'b-rook', side: 'black', type: PIECE_TYPE.ROOK, x: 4, y: 0 },
+      { id: 'b-general', side: 'black', type: PIECE_TYPE.GENERAL, x: 3, y: 0 }
+    ],
+    turn: 'red'
+  });
+
+  const { verdict } = engine.applyMove(state, {
+    from: { x: 4, y: 8 },
+    to: { x: 5, y: 8 }
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'MOVE_LEAVES_GENERAL_IN_CHECK');
+});

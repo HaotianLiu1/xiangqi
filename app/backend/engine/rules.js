@@ -278,17 +278,39 @@ export class XiangqiRuleEngine {
     };
   }
 
-  applyMove(state, move) {
-    const verdict = this.validateMove(state, move);
-    if (!verdict.ok) return { verdict, nextState: state };
-
-    const nextBoard = cloneBoard(state.board).filter((p) => !(p.x === move.to.x && p.y === move.to.y));
+  buildNextBoard(board, move) {
+    const nextBoard = cloneBoard(board).filter((p) => !(p.x === move.to.x && p.y === move.to.y));
     const idx = nextBoard.findIndex((p) => p.x === move.from.x && p.y === move.from.y);
     if (idx >= 0) {
       nextBoard[idx] = {
         ...nextBoard[idx],
         x: move.to.x,
         y: move.to.y
+      };
+    }
+    return nextBoard;
+  }
+
+  applyMove(state, move) {
+    const verdict = this.validateMove(state, move);
+    if (!verdict.ok) return { verdict, nextState: state };
+
+    const movingSide = state.turn;
+    const nextBoard = this.buildNextBoard(state.board, move);
+    const selfCheck = this.detectCheck(
+      { ...state, board: nextBoard },
+      movingSide
+    );
+
+    if (selfCheck.ok && selfCheck.inCheck) {
+      return {
+        verdict: {
+          ok: false,
+          code: 'MOVE_LEAVES_GENERAL_IN_CHECK',
+          message: '该走子后己方仍被将军（或形成帅将照面）',
+          detail: { attackers: selfCheck.attackers }
+        },
+        nextState: state
       };
     }
 
