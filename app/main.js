@@ -7,6 +7,9 @@ const undoBtn = document.getElementById('undo');
 const switchTurnBtn = document.getElementById('switchTurn');
 const boardEl = document.getElementById('board');
 const metaEl = document.getElementById('meta');
+const stateTurnEl = document.getElementById('stateTurn');
+const stateUndoEl = document.getElementById('stateUndo');
+const undoHintEl = document.getElementById('undoHint');
 
 const BOARD_COLS = 9;
 const BOARD_ROWS = 10;
@@ -59,7 +62,9 @@ const state = {
   history: [],
   moveCount: 0,
   selectedId: null,
-  legalMoves: []
+  legalMoves: [],
+  lastMovedId: null,
+  moveFlashTimer: null
 };
 
 function clonePieces(pieces) {
@@ -203,7 +208,9 @@ function renderPieces() {
   state.pieces.forEach((piece) => {
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = `piece ${piece.side}${piece.id === state.selectedId ? ' selected' : ''}`;
+    const selectedClass = piece.id === state.selectedId ? ' selected' : '';
+    const movedClass = piece.id === state.lastMovedId ? ' moved' : '';
+    el.className = `piece ${piece.side}${selectedClass}${movedClass}`;
     el.textContent = piece.text;
     el.style.left = `${(piece.x / (BOARD_COLS - 1)) * 100}%`;
     el.style.top = `${(piece.y / (BOARD_ROWS - 1)) * 100}%`;
@@ -216,6 +223,44 @@ function renderPieces() {
 
 function updateMeta() {
   metaEl.textContent = `难度：${state.difficulty}｜当前回合：${getCurrentSideText()}｜悔棋剩余：${state.undoRemaining}/${state.undoLimit}｜已走步数：${state.moveCount}`;
+}
+
+function updateStateBar() {
+  if (!state.started) {
+    stateTurnEl.textContent = '当前回合：未开始';
+    stateUndoEl.textContent = '剩余悔棋：-';
+    return;
+  }
+
+  stateTurnEl.textContent = `当前回合：${getCurrentSideText()}`;
+  stateUndoEl.textContent = `剩余悔棋：${state.undoRemaining}/${state.undoLimit}`;
+}
+
+function updateUndoAvailability() {
+  if (!state.started) {
+    undoBtn.disabled = true;
+    undoBtn.title = '请先开始新局';
+    undoHintEl.textContent = '未开局，悔棋不可用';
+    return;
+  }
+
+  if (state.undoRemaining <= 0) {
+    undoBtn.disabled = true;
+    undoBtn.title = '悔棋次数已用尽';
+    undoHintEl.textContent = '悔棋次数已用尽';
+    return;
+  }
+
+  if (state.history.length <= 0) {
+    undoBtn.disabled = true;
+    undoBtn.title = '当前没有可悔步骤';
+    undoHintEl.textContent = '走子后可悔棋';
+    return;
+  }
+
+  undoBtn.disabled = false;
+  undoBtn.title = `可悔棋（剩余 ${state.undoRemaining} 次）`;
+  undoHintEl.textContent = `可悔棋（剩余 ${state.undoRemaining} 次）`;
 }
 
 function saveSnapshot() {
@@ -238,13 +283,23 @@ function performMove(piece, targetX, targetY) {
   piece.x = targetX;
   piece.y = targetY;
 
+  state.lastMovedId = piece.id;
+  if (state.moveFlashTimer) {
+    clearTimeout(state.moveFlashTimer);
+  }
+  state.moveFlashTimer = setTimeout(() => {
+    state.lastMovedId = null;
+    renderPieces();
+  }, 260);
+
   state.turn = state.turn === 'red' ? 'black' : 'red';
   state.moveCount += 1;
   setSelected(null, []);
-  undoBtn.disabled = state.undoRemaining <= 0;
 
   renderPieces();
   updateMeta();
+  updateStateBar();
+  updateUndoAvailability();
   setStatus(`落子成功，轮到${getCurrentSideText()}。`);
 }
 
@@ -341,8 +396,8 @@ function lockSetup(locked) {
   difficultyEl.disabled = locked;
   undoInput.disabled = locked;
   startBtn.textContent = locked ? '进行中（可重开）' : '开始新局';
-  undoBtn.disabled = !locked || state.undoRemaining <= 0;
   switchTurnBtn.disabled = !locked;
+  updateUndoAvailability();
 }
 
 function prepareInitialPieces() {
@@ -369,10 +424,16 @@ function startGame() {
   state.moveCount = 0;
   state.history = [];
   state.pieces = prepareInitialPieces();
+  state.lastMovedId = null;
+  if (state.moveFlashTimer) {
+    clearTimeout(state.moveFlashTimer);
+    state.moveFlashTimer = null;
+  }
   setSelected(null, []);
 
   renderPieces();
   updateMeta();
+  updateStateBar();
   lockSetup(true);
 
   setStatus(`新局开始：难度=${state.difficulty}，悔棋可用=${state.undoLimit} 次。配置已锁定，重开可修改。`);
@@ -386,7 +447,7 @@ function undoMove() {
 
   if (state.undoRemaining <= 0) {
     setStatus('悔棋次数已用尽。', 'warn');
-    undoBtn.disabled = true;
+    updateUndoAvailability();
     return;
   }
 
@@ -402,9 +463,11 @@ function undoMove() {
   state.undoRemaining -= 1;
   setSelected(null, []);
 
+  state.lastMovedId = null;
   renderPieces();
   updateMeta();
-  undoBtn.disabled = state.undoRemaining <= 0;
+  updateStateBar();
+  updateUndoAvailability();
 
   setStatus(`已悔棋一次，剩余 ${state.undoRemaining} 次。`);
 }
@@ -421,10 +484,16 @@ function resetSetup() {
   state.history = [];
   state.pieces = prepareInitialPieces();
   state.moveCount = 0;
+  state.lastMovedId = null;
+  if (state.moveFlashTimer) {
+    clearTimeout(state.moveFlashTimer);
+    state.moveFlashTimer = null;
+  }
   setSelected(null, []);
 
   renderPieces();
   updateMeta();
+  updateStateBar();
   lockSetup(false);
   setStatus('已重置到开局前状态：可重新配置难度和悔棋次数。');
 }

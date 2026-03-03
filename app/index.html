@@ -36,6 +36,12 @@
       <div class="game-toolbar">
         <button id="undo" class="secondary" disabled>悔棋</button>
         <button id="switchTurn" class="secondary" disabled>切换回合（演示）</button>
+        <span id="undoHint" class="undo-hint"></span>
+      </div>
+
+      <div id="stateBar" class="state-bar" role="status" aria-live="polite">
+        <span id="stateTurn" class="state-chip">当前回合：未开始</span>
+        <span id="stateUndo" class="state-chip">剩余悔棋：-</span>
       </div>
 
       <div class="meta" id="meta"></div>
