@@ -64,7 +64,9 @@ const state = {
   selectedId: null,
   legalMoves: [],
   lastMovedId: null,
-  moveFlashTimer: null
+  lastMoveTarget: null,
+  moveFlashTimer: null,
+  targetFlashTimer: null
 };
 
 function clonePieces(pieces) {
@@ -208,9 +210,12 @@ function renderLegalMoves() {
   if (!layer) return;
 
   layer.innerHTML = '';
+  const targetKey = state.lastMoveTarget ? posKey(state.lastMoveTarget.x, state.lastMoveTarget.y) : '';
+
   state.legalMoves.forEach((pos, index) => {
     const marker = document.createElement('div');
-    marker.className = 'legal-marker';
+    const isTarget = targetKey && targetKey === posKey(pos.x, pos.y);
+    marker.className = `legal-marker${isTarget ? ' move-target' : ''}`;
     marker.style.left = `${(pos.x / (BOARD_COLS - 1)) * 100}%`;
     marker.style.top = `${(pos.y / (BOARD_ROWS - 1)) * 100}%`;
     marker.style.animationDelay = `${index * 35}ms`;
@@ -304,13 +309,23 @@ function performMove(piece, targetX, targetY) {
   piece.y = targetY;
 
   state.lastMovedId = piece.id;
+  state.lastMoveTarget = { x: targetX, y: targetY };
+
   if (state.moveFlashTimer) {
     clearTimeout(state.moveFlashTimer);
   }
   state.moveFlashTimer = setTimeout(() => {
     state.lastMovedId = null;
     renderPieces();
-  }, 260);
+  }, 320);
+
+  if (state.targetFlashTimer) {
+    clearTimeout(state.targetFlashTimer);
+  }
+  state.targetFlashTimer = setTimeout(() => {
+    state.lastMoveTarget = null;
+    renderLegalMoves();
+  }, 450);
 
   state.turn = state.turn === 'red' ? 'black' : 'red';
   state.moveCount += 1;
@@ -358,7 +373,7 @@ function onPieceClick(pieceId) {
   const legalMoves = getSimpleLegalMoves(pieceId);
   setSelected(pieceId, legalMoves);
   renderPieces();
-  setStatus(`已选中${piece.text}，请点击高亮点位落子。`);
+  setStatus(`已选中${piece.text}，可落点 ${legalMoves.length} 个，请点击高亮点位落子。`);
 }
 
 function onCellClick(x, y) {
@@ -439,9 +454,14 @@ function startGame() {
   state.history = [];
   state.pieces = prepareInitialPieces();
   state.lastMovedId = null;
+  state.lastMoveTarget = null;
   if (state.moveFlashTimer) {
     clearTimeout(state.moveFlashTimer);
     state.moveFlashTimer = null;
+  }
+  if (state.targetFlashTimer) {
+    clearTimeout(state.targetFlashTimer);
+    state.targetFlashTimer = null;
   }
   setSelected(null, []);
 
@@ -478,6 +498,7 @@ function undoMove() {
   setSelected(null, []);
 
   state.lastMovedId = null;
+  state.lastMoveTarget = null;
   renderPieces();
   updateMeta();
   updateStateBar();
@@ -499,9 +520,14 @@ function resetSetup() {
   state.pieces = prepareInitialPieces();
   state.moveCount = 0;
   state.lastMovedId = null;
+  state.lastMoveTarget = null;
   if (state.moveFlashTimer) {
     clearTimeout(state.moveFlashTimer);
     state.moveFlashTimer = null;
+  }
+  if (state.targetFlashTimer) {
+    clearTimeout(state.targetFlashTimer);
+    state.targetFlashTimer = null;
   }
   setSelected(null, []);
 
