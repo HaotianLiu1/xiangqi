@@ -1,9 +1,9 @@
 import { cloneBoard, INITIAL_BOARD, isInsideBoard, PIECE_TYPE } from './board.js';
 
 /**
- * 规则引擎（V2）
- * - 已实现：兵(SOLDIER)、车(ROOK)、炮(CANNON)、马(KNIGHT) 合法走子校验
- * - 将军检测：提供占位接口 detectCheck
+ * 规则引擎（V3）
+ * - 已实现：兵、车、炮、马 合法走子校验
+ * - 已实现：将军检测 V1（含帅将照面）
  */
 export class XiangqiRuleEngine {
   createInitialState() {
@@ -198,10 +198,41 @@ export class XiangqiRuleEngine {
     return board.find((p) => p.side === side && p.type === PIECE_TYPE.GENERAL) || null;
   }
 
+  isGeneralFacing(board, side) {
+    const mine = this.findGeneral(board, side);
+    const enemy = this.findGeneral(board, side === 'red' ? 'black' : 'red');
+    if (!mine || !enemy) return false;
+    if (mine.x !== enemy.x) return false;
+
+    const between = this.countPiecesBetween(board, { x: mine.x, y: mine.y }, { x: enemy.x, y: enemy.y });
+    return between === 0;
+  }
+
+  canPieceThreatenGeneral(board, piece, targetGeneral) {
+    const supportedThreatTypes = new Set([
+      PIECE_TYPE.SOLDIER,
+      PIECE_TYPE.ROOK,
+      PIECE_TYPE.CANNON,
+      PIECE_TYPE.KNIGHT
+    ]);
+
+    if (!supportedThreatTypes.has(piece.type)) return false;
+
+    const verdict = this.validateByPieceType(
+      board,
+      piece,
+      { x: piece.x, y: piece.y },
+      { x: targetGeneral.x, y: targetGeneral.y },
+      targetGeneral
+    );
+
+    return verdict.ok;
+  }
+
   /**
-   * 将军检测占位接口
-   * 当前实现：基于既有规则，尝试判断对方是否存在一步可吃将
-   * 注意：未覆盖“帅将照面”等完整规则细节，后续增强。
+   * 将军检测 V1
+   * - 检测兵/车/炮/马对将的直接威胁
+   * - 检测“帅将照面”
    */
   detectCheck(state, side) {
     const targetGeneral = this.findGeneral(state.board, side);
@@ -216,37 +247,32 @@ export class XiangqiRuleEngine {
 
     const enemySide = side === 'red' ? 'black' : 'red';
     const attackers = [];
-    const supportedThreatTypes = new Set([
-      PIECE_TYPE.SOLDIER,
-      PIECE_TYPE.ROOK,
-      PIECE_TYPE.CANNON,
-      PIECE_TYPE.KNIGHT
-    ]);
 
     const enemyPieces = state.board.filter((p) => p.side === enemySide);
     for (const piece of enemyPieces) {
-      if (!supportedThreatTypes.has(piece.type)) continue;
+      if (!this.canPieceThreatenGeneral(state.board, piece, targetGeneral)) continue;
 
-      const verdict = this.validateByPieceType(
-        state.board,
-        piece,
-        { x: piece.x, y: piece.y },
-        { x: targetGeneral.x, y: targetGeneral.y },
-        targetGeneral
-      );
+      attackers.push({
+        pieceId: piece.id,
+        pieceType: piece.type,
+        from: { x: piece.x, y: piece.y },
+        mode: 'piece_attack'
+      });
+    }
 
-      if (verdict.ok) {
-        attackers.push({
-          pieceId: piece.id,
-          pieceType: piece.type,
-          from: { x: piece.x, y: piece.y }
-        });
-      }
+    if (this.isGeneralFacing(state.board, side)) {
+      const enemyGeneral = this.findGeneral(state.board, enemySide);
+      attackers.push({
+        pieceId: enemyGeneral?.id || 'enemy-general',
+        pieceType: PIECE_TYPE.GENERAL,
+        from: enemyGeneral ? { x: enemyGeneral.x, y: enemyGeneral.y } : null,
+        mode: 'general_facing'
+      });
     }
 
     return {
       ok: true,
-      code: 'CHECK_DETECTION_PLACEHOLDER',
+      code: 'CHECK_DETECTED_V1',
       inCheck: attackers.length > 0,
       attackers
     };

@@ -95,6 +95,25 @@ test('cannon: capture requires exactly one piece in between', () => {
   assert.equal(verdict2.ok, true);
 });
 
+test('cannon: non-capture move cannot jump pieces', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [
+      { id: 'r-cannon', side: 'red', type: PIECE_TYPE.CANNON, x: 1, y: 7 },
+      { id: 'r-block', side: 'red', type: PIECE_TYPE.SOLDIER, x: 1, y: 6 }
+    ],
+    turn: 'red'
+  });
+
+  const verdict = engine.validateMove(state, {
+    from: { x: 1, y: 7 },
+    to: { x: 1, y: 5 }
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'CANNON_MOVE_BLOCKED');
+});
+
 test('knight: knight move blocked by horse-leg', () => {
   const engine = new XiangqiRuleEngine();
   const state = makeState({
@@ -114,6 +133,22 @@ test('knight: knight move blocked by horse-leg', () => {
   assert.equal(verdict.code, 'KNIGHT_LEG_BLOCKED');
 });
 
+test('knight: invalid shape should be rejected', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [{ id: 'r-knight', side: 'red', type: PIECE_TYPE.KNIGHT, x: 1, y: 9 }],
+    turn: 'red'
+  });
+
+  const verdict = engine.validateMove(state, {
+    from: { x: 1, y: 9 },
+    to: { x: 1, y: 8 }
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'INVALID_KNIGHT_SHAPE');
+});
+
 test('detectCheck: rook threatening general should be detected as check', () => {
   const engine = new XiangqiRuleEngine();
   const state = makeState({
@@ -130,4 +165,20 @@ test('detectCheck: rook threatening general should be detected as check', () => 
   assert.equal(result.inCheck, true);
   assert.equal(result.attackers.length, 1);
   assert.equal(result.attackers[0].pieceType, PIECE_TYPE.ROOK);
+});
+
+test('detectCheck: facing generals should be detected', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [
+      { id: 'r-general', side: 'red', type: PIECE_TYPE.GENERAL, x: 4, y: 9 },
+      { id: 'b-general', side: 'black', type: PIECE_TYPE.GENERAL, x: 4, y: 0 }
+    ],
+    turn: 'red'
+  });
+
+  const result = engine.detectCheck(state, 'red');
+  assert.equal(result.ok, true);
+  assert.equal(result.inCheck, true);
+  assert.equal(result.attackers.some((a) => a.mode === 'general_facing'), true);
 });

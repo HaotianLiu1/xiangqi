@@ -135,6 +135,15 @@ export class GameSessionStore {
     };
   }
 
+  detectCheck(sessionId, side) {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return { ok: false, code: 'SESSION_NOT_FOUND', message: '对局不存在' };
+    }
+
+    return this.ruleEngine.detectCheck(session.state, side);
+  }
+
   undo(sessionId) {
     const session = this.getSession(sessionId);
     if (!session) {

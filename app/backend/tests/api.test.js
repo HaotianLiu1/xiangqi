@@ -22,7 +22,6 @@ test('api: playMove returns meta with next turn', () => {
   const created = api.createSession({ sessionId: 's-api-2', undoLimit: 1 });
   assert.equal(created.ok, true);
 
-  // red soldier forward one step (legal)
   const moved = api.playMove('s-api-2', {
     from: { x: 0, y: 6 },
     to: { x: 0, y: 5 }
@@ -33,7 +32,7 @@ test('api: playMove returns meta with next turn', () => {
   assert.equal(moved.meta.moveCount, 1);
 });
 
-test('api: detectCheck placeholder endpoint works', () => {
+test('api: detectCheck endpoint works', () => {
   const api = createDraftApi();
   const created = api.createSession({ sessionId: 's-api-3', undoLimit: 1 });
   assert.equal(created.ok, true);
@@ -42,4 +41,28 @@ test('api: detectCheck placeholder endpoint works', () => {
   assert.equal(check.ok, true);
   assert.equal(typeof check.inCheck, 'boolean');
   assert.ok(Array.isArray(check.attackers));
+});
+
+test('api: standardized errorCode for invalid move', () => {
+  const api = createDraftApi();
+  api.createSession({ sessionId: 's-api-4' });
+
+  const res = api.playMove('s-api-4', {
+    from: { x: 0, y: 6 },
+    to: { x: 0, y: 6 }
+  });
+
+  assert.equal(res.ok, false);
+  assert.equal(res.code, 'NO_OP_MOVE');
+  assert.equal(res.errorCode, 'ERR_NO_OP_MOVE');
+});
+
+test('api: standardized errorCode for invalid side in detectCheck', () => {
+  const api = createDraftApi();
+  api.createSession({ sessionId: 's-api-5' });
+
+  const res = api.detectCheck('s-api-5', 'blue');
+  assert.equal(res.ok, false);
+  assert.equal(res.code, 'INVALID_SIDE');
+  assert.equal(res.errorCode, 'ERR_INVALID_SIDE');
 });
