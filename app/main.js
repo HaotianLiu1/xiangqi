@@ -98,6 +98,23 @@ function setSelected(selectedId = null, legalMoves = []) {
   state.legalMoves = legalMoves;
 }
 
+function setIllegalMoveStatus(extra = '') {
+  const suffix = extra ? `（${extra}）` : '';
+  setStatus(`非法落子：仅可操作当前回合棋子并落在高亮可落点${suffix}。`, 'error');
+}
+
+function getValidatedUndoLimit(syncInput = false) {
+  const raw = undoInput.value?.trim();
+  const parsed = raw === '' ? 0 : Number(raw);
+  const safeUndo = Number.isFinite(parsed) ? Math.max(0, Math.min(99, Math.floor(parsed))) : 0;
+
+  if (syncInput) {
+    undoInput.value = String(safeUndo);
+  }
+
+  return safeUndo;
+}
+
 function inBoard(x, y) {
   return x >= 0 && x < BOARD_COLS && y >= 0 && y < BOARD_ROWS;
 }
@@ -191,11 +208,12 @@ function renderLegalMoves() {
   if (!layer) return;
 
   layer.innerHTML = '';
-  state.legalMoves.forEach((pos) => {
+  state.legalMoves.forEach((pos, index) => {
     const marker = document.createElement('div');
     marker.className = 'legal-marker';
     marker.style.left = `${(pos.x / (BOARD_COLS - 1)) * 100}%`;
     marker.style.top = `${(pos.y / (BOARD_ROWS - 1)) * 100}%`;
+    marker.style.animationDelay = `${index * 35}ms`;
     layer.appendChild(marker);
   });
 }
@@ -227,8 +245,9 @@ function updateMeta() {
 
 function updateStateBar() {
   if (!state.started) {
+    const pendingLimit = getValidatedUndoLimit(true);
     stateTurnEl.textContent = '当前回合：未开始';
-    stateUndoEl.textContent = '剩余悔棋：-';
+    stateUndoEl.textContent = `剩余悔棋（预设）：${pendingLimit}`;
     return;
   }
 
@@ -238,9 +257,10 @@ function updateStateBar() {
 
 function updateUndoAvailability() {
   if (!state.started) {
+    const pendingLimit = getValidatedUndoLimit(true);
     undoBtn.disabled = true;
     undoBtn.title = '请先开始新局';
-    undoHintEl.textContent = '未开局，悔棋不可用';
+    undoHintEl.textContent = `未开局，预设悔棋 ${pendingLimit} 次`;
     return;
   }
 
@@ -324,7 +344,7 @@ function onPieceClick(pieceId) {
       }
     }
 
-    setStatus('非法落子：当前回合不可操作对方棋子。', 'error');
+    setIllegalMoveStatus('不可操作对方棋子');
     return;
   }
 
@@ -367,7 +387,7 @@ function onCellClick(x, y) {
 
   const legalSet = new Set(state.legalMoves.map((m) => posKey(m.x, m.y)));
   if (!legalSet.has(posKey(x, y))) {
-    setStatus('非法落子：该位置不是当前棋子的可落子点。', 'error');
+    setIllegalMoveStatus('目标不在可落点');
     return;
   }
 
@@ -408,13 +428,7 @@ function prepareInitialPieces() {
 }
 
 function startGame() {
-  const raw = undoInput.value?.trim();
-  const inputNum = raw === '' ? 0 : Number(raw);
-  const safeUndo = Number.isFinite(inputNum) ? Math.max(0, Math.min(99, Math.floor(inputNum))) : 0;
-
-  if (safeUndo !== inputNum) {
-    undoInput.value = String(safeUndo);
-  }
+  const safeUndo = getValidatedUndoLimit(true);
 
   state.started = true;
   state.difficulty = difficultyEl.value;
@@ -501,6 +515,10 @@ function resetSetup() {
 startBtn.addEventListener('click', startGame);
 undoBtn.addEventListener('click', undoMove);
 resetBtn.addEventListener('click', resetSetup);
+undoInput.addEventListener('input', () => {
+  updateStateBar();
+  updateUndoAvailability();
+});
 switchTurnBtn.addEventListener('click', () => {
   if (!state.started) {
     setStatus('请先开始新局。', 'warn');
