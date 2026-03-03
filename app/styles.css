@@ -176,11 +176,46 @@ button.secondary { background: var(--btn-secondary); }
   font-size: 18px;
   letter-spacing: 12px;
   font-weight: 600;
+  z-index: 1;
 }
 
+.cells-layer,
+.legal-layer,
 .pieces-layer {
   position: absolute;
   inset: 18px;
+}
+
+.cells-layer { z-index: 2; }
+.legal-layer { z-index: 3; pointer-events: none; }
+.pieces-layer { z-index: 4; }
+
+.cell-hit {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin-left: -14px;
+  margin-top: -14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.cell-hit:hover {
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.legal-marker {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  margin-top: -8px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.35);
+  border: 1px solid rgba(3, 105, 161, 0.65);
 }
 
 .piece {
@@ -196,6 +231,7 @@ button.secondary { background: var(--btn-secondary); }
   background: #fff7ed;
   font-weight: 700;
   user-select: none;
+  padding: 0;
 }
 
 .piece.red {
@@ -206,6 +242,11 @@ button.secondary { background: var(--btn-secondary); }
 .piece.black {
   color: var(--black);
   border-color: #1f2937;
+}
+
+.piece.selected {
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.45);
+  transform: scale(1.05);
 }
 
 @media (max-width: 640px) {

@@ -57,7 +57,9 @@ const state = {
   undoRemaining: 1,
   pieces: [],
   history: [],
-  moveCount: 0
+  moveCount: 0,
+  selectedId: null,
+  legalMoves: []
 };
 
 function clonePieces(pieces) {
@@ -66,6 +68,7 @@ function clonePieces(pieces) {
 
 function setStatus(message, type = 'ok') {
   statusEl.textContent = message;
+
   if (type === 'warn') {
     statusEl.style.background = '#fff7ed';
     statusEl.style.borderColor = '#fdba74';
@@ -73,9 +76,55 @@ function setStatus(message, type = 'ok') {
     return;
   }
 
+  if (type === 'error') {
+    statusEl.style.background = '#fef2f2';
+    statusEl.style.borderColor = '#fca5a5';
+    statusEl.style.color = '#991b1b';
+    return;
+  }
+
   statusEl.style.background = '#ecfdf5';
   statusEl.style.borderColor = '#a7f3d0';
   statusEl.style.color = '#166534';
+}
+
+function setSelected(selectedId = null, legalMoves = []) {
+  state.selectedId = selectedId;
+  state.legalMoves = legalMoves;
+}
+
+function inBoard(x, y) {
+  return x >= 0 && x < BOARD_COLS && y >= 0 && y < BOARD_ROWS;
+}
+
+function posKey(x, y) {
+  return `${x},${y}`;
+}
+
+function findPieceAt(x, y) {
+  return state.pieces.find((p) => p.x === x && p.y === y) || null;
+}
+
+function getCurrentSideText() {
+  return state.turn === 'red' ? '红方' : '黑方';
+}
+
+function getSimpleLegalMoves(pieceId) {
+  const piece = state.pieces.find((p) => p.id === pieceId);
+  if (!piece) return [];
+
+  const candidates = [
+    { x: piece.x + 1, y: piece.y },
+    { x: piece.x - 1, y: piece.y },
+    { x: piece.x, y: piece.y + 1 },
+    { x: piece.x, y: piece.y - 1 }
+  ];
+
+  return candidates.filter((pos) => {
+    if (!inBoard(pos.x, pos.y)) return false;
+    const occupant = findPieceAt(pos.x, pos.y);
+    return !occupant || occupant.side !== piece.side;
+  });
 }
 
 function buildBoardStatic() {
@@ -102,12 +151,48 @@ function buildBoardStatic() {
   river.className = 'river';
   river.textContent = '楚河   汉界';
 
-  const layer = document.createElement('div');
-  layer.className = 'pieces-layer';
+  const cellsLayer = document.createElement('div');
+  cellsLayer.className = 'cells-layer';
+
+  for (let y = 0; y < BOARD_ROWS; y += 1) {
+    for (let x = 0; x < BOARD_COLS; x += 1) {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cell-hit';
+      cell.style.left = `${(x / (BOARD_COLS - 1)) * 100}%`;
+      cell.style.top = `${(y / (BOARD_ROWS - 1)) * 100}%`;
+      cell.dataset.x = String(x);
+      cell.dataset.y = String(y);
+      cell.addEventListener('click', () => onCellClick(x, y));
+      cellsLayer.appendChild(cell);
+    }
+  }
+
+  const legalLayer = document.createElement('div');
+  legalLayer.className = 'legal-layer';
+
+  const piecesLayer = document.createElement('div');
+  piecesLayer.className = 'pieces-layer';
 
   boardEl.appendChild(grid);
   boardEl.appendChild(river);
-  boardEl.appendChild(layer);
+  boardEl.appendChild(cellsLayer);
+  boardEl.appendChild(legalLayer);
+  boardEl.appendChild(piecesLayer);
+}
+
+function renderLegalMoves() {
+  const layer = boardEl.querySelector('.legal-layer');
+  if (!layer) return;
+
+  layer.innerHTML = '';
+  state.legalMoves.forEach((pos) => {
+    const marker = document.createElement('div');
+    marker.className = 'legal-marker';
+    marker.style.left = `${(pos.x / (BOARD_COLS - 1)) * 100}%`;
+    marker.style.top = `${(pos.y / (BOARD_ROWS - 1)) * 100}%`;
+    layer.appendChild(marker);
+  });
 }
 
 function renderPieces() {
@@ -116,57 +201,139 @@ function renderPieces() {
 
   layer.innerHTML = '';
   state.pieces.forEach((piece) => {
-    const el = document.createElement('div');
-    el.className = `piece ${piece.side}`;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `piece ${piece.side}${piece.id === state.selectedId ? ' selected' : ''}`;
     el.textContent = piece.text;
     el.style.left = `${(piece.x / (BOARD_COLS - 1)) * 100}%`;
     el.style.top = `${(piece.y / (BOARD_ROWS - 1)) * 100}%`;
+    el.addEventListener('click', () => onPieceClick(piece.id));
     layer.appendChild(el);
   });
+
+  renderLegalMoves();
 }
 
 function updateMeta() {
-  const sideText = state.turn === 'red' ? '红方' : '黑方';
-  metaEl.textContent = `难度：${state.difficulty}｜当前回合：${sideText}｜悔棋剩余：${state.undoRemaining}/${state.undoLimit}｜已走步数：${state.moveCount}`;
+  metaEl.textContent = `难度：${state.difficulty}｜当前回合：${getCurrentSideText()}｜悔棋剩余：${state.undoRemaining}/${state.undoLimit}｜已走步数：${state.moveCount}`;
 }
 
-function randomMovePiece() {
-  const movable = state.pieces.filter((p) => p.side === state.turn);
-  if (movable.length === 0) return false;
-
-  const piece = movable[Math.floor(Math.random() * movable.length)];
-  const from = { x: piece.x, y: piece.y };
-  const candidates = [
-    { x: piece.x + 1, y: piece.y },
-    { x: piece.x - 1, y: piece.y },
-    { x: piece.x, y: piece.y + 1 },
-    { x: piece.x, y: piece.y - 1 }
-  ].filter((pos) => pos.x >= 0 && pos.x < BOARD_COLS && pos.y >= 0 && pos.y < BOARD_ROWS);
-
-  if (candidates.length === 0) return false;
-
-  const to = candidates[Math.floor(Math.random() * candidates.length)];
-
+function saveSnapshot() {
   state.history.push({
     pieces: clonePieces(state.pieces),
     turn: state.turn,
     moveCount: state.moveCount,
     undoRemaining: state.undoRemaining
   });
+}
 
-  const occupantIdx = state.pieces.findIndex((p) => p.x === to.x && p.y === to.y && p.side !== piece.side);
+function performMove(piece, targetX, targetY) {
+  saveSnapshot();
+
+  const occupantIdx = state.pieces.findIndex((p) => p.x === targetX && p.y === targetY && p.side !== piece.side);
   if (occupantIdx >= 0) {
     state.pieces.splice(occupantIdx, 1);
   }
 
-  piece.x = to.x;
-  piece.y = to.y;
+  piece.x = targetX;
+  piece.y = targetY;
 
   state.turn = state.turn === 'red' ? 'black' : 'red';
   state.moveCount += 1;
+  setSelected(null, []);
+  undoBtn.disabled = state.undoRemaining <= 0;
 
-  const sideName = state.turn === 'red' ? '黑方' : '红方';
-  setStatus(`已执行演示走子：${sideName}完成一步。`, 'ok');
+  renderPieces();
+  updateMeta();
+  setStatus(`落子成功，轮到${getCurrentSideText()}。`);
+}
+
+function onPieceClick(pieceId) {
+  if (!state.started) {
+    setStatus('请先开始新局。', 'warn');
+    return;
+  }
+
+  const piece = state.pieces.find((p) => p.id === pieceId);
+  if (!piece) return;
+
+  if (piece.side !== state.turn) {
+    if (state.selectedId) {
+      const legalSet = new Set(state.legalMoves.map((m) => posKey(m.x, m.y)));
+      if (legalSet.has(posKey(piece.x, piece.y))) {
+        const selectedPiece = state.pieces.find((p) => p.id === state.selectedId);
+        if (selectedPiece) {
+          performMove(selectedPiece, piece.x, piece.y);
+          return;
+        }
+      }
+    }
+
+    setStatus('非法落子：当前回合不可操作对方棋子。', 'error');
+    return;
+  }
+
+  if (state.selectedId === pieceId) {
+    setSelected(null, []);
+    renderPieces();
+    setStatus('已取消选中。');
+    return;
+  }
+
+  const legalMoves = getSimpleLegalMoves(pieceId);
+  setSelected(pieceId, legalMoves);
+  renderPieces();
+  setStatus(`已选中${piece.text}，请点击高亮点位落子。`);
+}
+
+function onCellClick(x, y) {
+  if (!state.started) {
+    setStatus('请先开始新局。', 'warn');
+    return;
+  }
+
+  const occupant = findPieceAt(x, y);
+  if (!state.selectedId) {
+    if (occupant && occupant.side === state.turn) {
+      onPieceClick(occupant.id);
+      return;
+    }
+
+    setStatus('请先选中当前回合的一枚棋子。', 'warn');
+    return;
+  }
+
+  const selectedPiece = state.pieces.find((p) => p.id === state.selectedId);
+  if (!selectedPiece) {
+    setSelected(null, []);
+    renderPieces();
+    return;
+  }
+
+  const legalSet = new Set(state.legalMoves.map((m) => posKey(m.x, m.y)));
+  if (!legalSet.has(posKey(x, y))) {
+    setStatus('非法落子：该位置不是当前棋子的可落子点。', 'error');
+    return;
+  }
+
+  performMove(selectedPiece, x, y);
+}
+
+function randomMovePiece() {
+  const movable = state.pieces.filter((p) => p.side === state.turn);
+  if (movable.length === 0) return false;
+
+  const candidates = movable
+    .map((piece) => ({ piece, legalMoves: getSimpleLegalMoves(piece.id) }))
+    .filter((item) => item.legalMoves.length > 0);
+
+  if (candidates.length === 0) return false;
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  const target = chosen.legalMoves[Math.floor(Math.random() * chosen.legalMoves.length)];
+
+  performMove(chosen.piece, target.x, target.y);
+  setStatus(`已执行演示走子，轮到${getCurrentSideText()}。`);
   return true;
 }
 
@@ -176,6 +343,13 @@ function lockSetup(locked) {
   startBtn.textContent = locked ? '进行中（可重开）' : '开始新局';
   undoBtn.disabled = !locked || state.undoRemaining <= 0;
   switchTurnBtn.disabled = !locked;
+}
+
+function prepareInitialPieces() {
+  return clonePieces(INITIAL_PIECES).map((piece, index) => ({
+    ...piece,
+    id: `p-${index}`
+  }));
 }
 
 function startGame() {
@@ -194,7 +368,8 @@ function startGame() {
   state.turn = 'red';
   state.moveCount = 0;
   state.history = [];
-  state.pieces = clonePieces(INITIAL_PIECES);
+  state.pieces = prepareInitialPieces();
+  setSelected(null, []);
 
   renderPieces();
   updateMeta();
@@ -225,6 +400,7 @@ function undoMove() {
   state.turn = prev.turn;
   state.moveCount = prev.moveCount;
   state.undoRemaining -= 1;
+  setSelected(null, []);
 
   renderPieces();
   updateMeta();
@@ -243,8 +419,9 @@ function resetSetup() {
   state.undoLimit = 1;
   state.undoRemaining = 1;
   state.history = [];
-  state.pieces = clonePieces(INITIAL_PIECES);
+  state.pieces = prepareInitialPieces();
   state.moveCount = 0;
+  setSelected(null, []);
 
   renderPieces();
   updateMeta();
@@ -266,10 +443,6 @@ switchTurnBtn.addEventListener('click', () => {
     setStatus('当前无可执行演示步。', 'warn');
     return;
   }
-
-  undoBtn.disabled = state.undoRemaining <= 0;
-  updateMeta();
-  renderPieces();
 });
 
 buildBoardStatic();
