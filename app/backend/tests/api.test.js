@@ -32,3 +32,14 @@ test('api: playMove returns meta with next turn', () => {
   assert.equal(moved.meta.nextTurn, 'black');
   assert.equal(moved.meta.moveCount, 1);
 });
+
+test('api: detectCheck placeholder endpoint works', () => {
+  const api = createDraftApi();
+  const created = api.createSession({ sessionId: 's-api-3', undoLimit: 1 });
+  assert.equal(created.ok, true);
+
+  const check = api.detectCheck('s-api-3', 'red');
+  assert.equal(check.ok, true);
+  assert.equal(typeof check.inCheck, 'boolean');
+  assert.ok(Array.isArray(check.attackers));
+});

@@ -1,9 +1,9 @@
 import { cloneBoard, INITIAL_BOARD, isInsideBoard, PIECE_TYPE } from './board.js';
 
 /**
- * 规则引擎（V1）
- * - 已实现：兵(SOLDIER)、车(ROOK) 合法走子校验
- * - 其他棋子：占位放行（后续补齐）
+ * 规则引擎（V2）
+ * - 已实现：兵(SOLDIER)、车(ROOK)、炮(CANNON)、马(KNIGHT) 合法走子校验
+ * - 将军检测：提供占位接口 detectCheck
  */
 export class XiangqiRuleEngine {
   createInitialState() {
@@ -18,21 +18,27 @@ export class XiangqiRuleEngine {
     return board.find((p) => p.x === x && p.y === y) || null;
   }
 
-  isPathClearStraight(board, from, to) {
-    if (from.x !== to.x && from.y !== to.y) return false;
+  countPiecesBetween(board, from, to) {
+    if (from.x !== to.x && from.y !== to.y) return -1;
 
     const dx = Math.sign(to.x - from.x);
     const dy = Math.sign(to.y - from.y);
     let cx = from.x + dx;
     let cy = from.y + dy;
+    let count = 0;
 
     while (cx !== to.x || cy !== to.y) {
-      if (this.getPieceAt(board, cx, cy)) return false;
+      if (this.getPieceAt(board, cx, cy)) count += 1;
       cx += dx;
       cy += dy;
     }
 
-    return true;
+    return count;
+  }
+
+  isPathClearStraight(board, from, to) {
+    const between = this.countPiecesBetween(board, from, to);
+    return between === 0;
   }
 
   validateSoldierMove(movingPiece, from, to) {
@@ -75,13 +81,63 @@ export class XiangqiRuleEngine {
     return { ok: true };
   }
 
-  validateByPieceType(board, movingPiece, from, to) {
+  validateCannonMove(board, from, to, hasTargetPiece) {
+    if (from.x !== to.x && from.y !== to.y) {
+      return { ok: false, code: 'INVALID_CANNON_DIRECTION', message: '炮只能走直线' };
+    }
+
+    const between = this.countPiecesBetween(board, from, to);
+    if (between < 0) {
+      return { ok: false, code: 'INVALID_CANNON_DIRECTION', message: '炮只能走直线' };
+    }
+
+    if (!hasTargetPiece && between !== 0) {
+      return { ok: false, code: 'CANNON_MOVE_BLOCKED', message: '炮不吃子时路径不能有阻挡' };
+    }
+
+    if (hasTargetPiece && between !== 1) {
+      return { ok: false, code: 'CANNON_CAPTURE_RULE', message: '炮吃子时必须隔一子' };
+    }
+
+    return { ok: true };
+  }
+
+  validateKnightMove(board, from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
+
+    if (!((adx === 2 && ady === 1) || (adx === 1 && ady === 2))) {
+      return { ok: false, code: 'INVALID_KNIGHT_SHAPE', message: '马走日字' };
+    }
+
+    const leg = adx === 2
+      ? { x: from.x + Math.sign(dx), y: from.y }
+      : { x: from.x, y: from.y + Math.sign(dy) };
+
+    if (this.getPieceAt(board, leg.x, leg.y)) {
+      return { ok: false, code: 'KNIGHT_LEG_BLOCKED', message: '马腿被蹩' };
+    }
+
+    return { ok: true };
+  }
+
+  validateByPieceType(board, movingPiece, from, to, targetPiece) {
     if (movingPiece.type === PIECE_TYPE.SOLDIER) {
       return this.validateSoldierMove(movingPiece, from, to);
     }
 
     if (movingPiece.type === PIECE_TYPE.ROOK) {
       return this.validateRookMove(board, from, to);
+    }
+
+    if (movingPiece.type === PIECE_TYPE.CANNON) {
+      return this.validateCannonMove(board, from, to, Boolean(targetPiece));
+    }
+
+    if (movingPiece.type === PIECE_TYPE.KNIGHT) {
+      return this.validateKnightMove(board, from, to);
     }
 
     return {
@@ -122,7 +178,7 @@ export class XiangqiRuleEngine {
       return { ok: false, code: 'BLOCKED_BY_FRIEND', message: '目标位置己方占用' };
     }
 
-    const pieceVerdict = this.validateByPieceType(board, movingPiece, from, to);
+    const pieceVerdict = this.validateByPieceType(board, movingPiece, from, to, targetPiece);
     if (!pieceVerdict.ok) {
       return pieceVerdict;
     }
@@ -135,6 +191,64 @@ export class XiangqiRuleEngine {
         pieceType: movingPiece.type,
         hasCapture: Boolean(targetPiece)
       }
+    };
+  }
+
+  findGeneral(board, side) {
+    return board.find((p) => p.side === side && p.type === PIECE_TYPE.GENERAL) || null;
+  }
+
+  /**
+   * 将军检测占位接口
+   * 当前实现：基于既有规则，尝试判断对方是否存在一步可吃将
+   * 注意：未覆盖“帅将照面”等完整规则细节，后续增强。
+   */
+  detectCheck(state, side) {
+    const targetGeneral = this.findGeneral(state.board, side);
+    if (!targetGeneral) {
+      return {
+        ok: false,
+        code: 'GENERAL_NOT_FOUND',
+        inCheck: false,
+        attackers: []
+      };
+    }
+
+    const enemySide = side === 'red' ? 'black' : 'red';
+    const attackers = [];
+    const supportedThreatTypes = new Set([
+      PIECE_TYPE.SOLDIER,
+      PIECE_TYPE.ROOK,
+      PIECE_TYPE.CANNON,
+      PIECE_TYPE.KNIGHT
+    ]);
+
+    const enemyPieces = state.board.filter((p) => p.side === enemySide);
+    for (const piece of enemyPieces) {
+      if (!supportedThreatTypes.has(piece.type)) continue;
+
+      const verdict = this.validateByPieceType(
+        state.board,
+        piece,
+        { x: piece.x, y: piece.y },
+        { x: targetGeneral.x, y: targetGeneral.y },
+        targetGeneral
+      );
+
+      if (verdict.ok) {
+        attackers.push({
+          pieceId: piece.id,
+          pieceType: piece.type,
+          from: { x: piece.x, y: piece.y }
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      code: 'CHECK_DETECTION_PLACEHOLDER',
+      inCheck: attackers.length > 0,
+      attackers
     };
   }
 

@@ -24,6 +24,9 @@
  *   body: { level?: 'easy|medium|hard' }
  *   res : { ok, move, verdict, session, meta }
  *
+ * - GET    /api/v1/sessions/:sessionId/check?side=red|black
+ *   res : { ok, inCheck, attackers }
+ *
  * - POST   /api/v1/sessions/:sessionId/undo
  *   res : { ok, session }
  *
@@ -72,6 +75,16 @@ export function createDraftApi() {
 
       const result = store.applyMove(sessionId, move);
       return { ...result, move };
+    },
+
+    detectCheck(sessionId, side) {
+      const session = store.getSession(sessionId);
+      if (!session) return { ok: false, code: 'SESSION_NOT_FOUND' };
+      if (!side || (side !== 'red' && side !== 'black')) {
+        return { ok: false, code: 'INVALID_SIDE', message: 'side 必须为 red 或 black' };
+      }
+
+      return store.ruleEngine.detectCheck(session.state, side);
     },
 
     undo(sessionId) {
