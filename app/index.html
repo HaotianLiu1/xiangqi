@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>离线象棋原型</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <h1>离线象棋（原型）</h1>
+  <div class="controls">
+    <label>难度
+      <select id="difficulty">
+        <option>简单</option><option>中等</option><option>困难</option>
+      </select>
+    </label>
+    <label>悔棋次数 <input id="undoLimit" type="number" min="0" max="99" value="1" /></label>
+    <button id="start">开始新局</button>
+  </div>
+  <p id="status">已初始化（离线模式）</p>
+  <div id="board"></div>
+  <script src="./main.js"></script>
+</body>
+</html>
