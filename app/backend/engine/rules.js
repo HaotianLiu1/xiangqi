@@ -1,10 +1,9 @@
-import { cloneBoard, INITIAL_BOARD, isInsideBoard } from './board.js';
+import { cloneBoard, INITIAL_BOARD, isInsideBoard, PIECE_TYPE } from './board.js';
 
 /**
- * 规则引擎（最小骨架）
- * - 提供合法走子校验入口
- * - 当前仅做基础边界/占位校验
- * - 各棋子详细规则后续补齐
+ * 规则引擎（V1）
+ * - 已实现：兵(SOLDIER)、车(ROOK) 合法走子校验
+ * - 其他棋子：占位放行（后续补齐）
  */
 export class XiangqiRuleEngine {
   createInitialState() {
@@ -19,6 +18,79 @@ export class XiangqiRuleEngine {
     return board.find((p) => p.x === x && p.y === y) || null;
   }
 
+  isPathClearStraight(board, from, to) {
+    if (from.x !== to.x && from.y !== to.y) return false;
+
+    const dx = Math.sign(to.x - from.x);
+    const dy = Math.sign(to.y - from.y);
+    let cx = from.x + dx;
+    let cy = from.y + dy;
+
+    while (cx !== to.x || cy !== to.y) {
+      if (this.getPieceAt(board, cx, cy)) return false;
+      cx += dx;
+      cy += dy;
+    }
+
+    return true;
+  }
+
+  validateSoldierMove(movingPiece, from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const stepCount = Math.abs(dx) + Math.abs(dy);
+
+    if (stepCount !== 1) {
+      return { ok: false, code: 'INVALID_SOLDIER_STEP', message: '兵/卒每次只能走一格' };
+    }
+
+    const isRed = movingPiece.side === 'red';
+    const forward = isRed ? -1 : 1;
+    const hasCrossedRiver = isRed ? from.y <= 4 : from.y >= 5;
+
+    if (dy === forward && dx === 0) {
+      return { ok: true };
+    }
+
+    if (dy === 0 && Math.abs(dx) === 1 && hasCrossedRiver) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      code: 'INVALID_SOLDIER_DIRECTION',
+      message: hasCrossedRiver ? '兵/卒过河后可平走，不可后退' : '兵/卒未过河前只能前进'
+    };
+  }
+
+  validateRookMove(board, from, to) {
+    if (from.x !== to.x && from.y !== to.y) {
+      return { ok: false, code: 'INVALID_ROOK_DIRECTION', message: '车只能走直线' };
+    }
+
+    if (!this.isPathClearStraight(board, from, to)) {
+      return { ok: false, code: 'ROOK_PATH_BLOCKED', message: '车的路径被阻挡' };
+    }
+
+    return { ok: true };
+  }
+
+  validateByPieceType(board, movingPiece, from, to) {
+    if (movingPiece.type === PIECE_TYPE.SOLDIER) {
+      return this.validateSoldierMove(movingPiece, from, to);
+    }
+
+    if (movingPiece.type === PIECE_TYPE.ROOK) {
+      return this.validateRookMove(board, from, to);
+    }
+
+    return {
+      ok: true,
+      code: 'PLACEHOLDER_PASS',
+      message: '该棋子规则暂未启用，按占位校验通过'
+    };
+  }
+
   validateMove(state, move) {
     const { board, turn } = state;
     const from = move?.from;
@@ -30,6 +102,10 @@ export class XiangqiRuleEngine {
 
     if (!isInsideBoard(from.x, from.y) || !isInsideBoard(to.x, to.y)) {
       return { ok: false, code: 'OUT_OF_BOARD', message: '目标超出棋盘范围' };
+    }
+
+    if (from.x === to.x && from.y === to.y) {
+      return { ok: false, code: 'NO_OP_MOVE', message: '起终点不能相同' };
     }
 
     const movingPiece = this.getPieceAt(board, from.x, from.y);
@@ -46,11 +122,15 @@ export class XiangqiRuleEngine {
       return { ok: false, code: 'BLOCKED_BY_FRIEND', message: '目标位置己方占用' };
     }
 
-    // TODO(xiaoxu): 按棋子类型补充严格走法校验
+    const pieceVerdict = this.validateByPieceType(board, movingPiece, from, to);
+    if (!pieceVerdict.ok) {
+      return pieceVerdict;
+    }
+
     return {
       ok: true,
-      code: 'PLACEHOLDER_PASS',
-      message: '占位校验通过（尚未启用完整棋规）',
+      code: pieceVerdict.code || 'VALID_MOVE',
+      message: pieceVerdict.message || '走子合法',
       detail: {
         pieceType: movingPiece.type,
         hasCapture: Boolean(targetPiece)

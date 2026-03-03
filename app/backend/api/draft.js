@@ -12,13 +12,17 @@
  * - GET    /api/v1/sessions
  *   res : [{ sessionId, status, difficulty, moveCount, updatedAt }]
  *
+ * - PATCH  /api/v1/sessions/:sessionId
+ *   body: { status: 'playing|paused|finished' }
+ *   res : { ok, session, meta }
+ *
  * - POST   /api/v1/sessions/:sessionId/moves
  *   body: { from: {x,y}, to: {x,y} }
- *   res : { ok, verdict, session }
+ *   res : { ok, verdict, session, meta }
  *
  * - POST   /api/v1/sessions/:sessionId/ai-move
  *   body: { level?: 'easy|medium|hard' }
- *   res : { ok, move, verdict, session }
+ *   res : { ok, move, verdict, session, meta }
  *
  * - POST   /api/v1/sessions/:sessionId/undo
  *   res : { ok, session }
@@ -41,13 +45,18 @@ export function createDraftApi() {
     },
 
     getSession(sessionId) {
-      const session = store.getSession(sessionId);
-      if (!session) return { ok: false, code: 'SESSION_NOT_FOUND' };
-      return { ok: true, session };
+      return store.getSessionSnapshot(sessionId);
     },
 
     listSessions() {
       return { ok: true, sessions: store.listSessions() };
+    },
+
+    updateSession(sessionId, patch = {}) {
+      if (!patch.status) {
+        return { ok: false, code: 'INVALID_PATCH', message: '当前仅支持 patch.status' };
+      }
+      return store.updateSessionStatus(sessionId, patch.status);
     },
 
     playMove(sessionId, move) {

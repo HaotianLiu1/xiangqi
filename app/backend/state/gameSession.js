@@ -23,6 +23,7 @@ export class GameSessionStore {
       status: 'playing',
       createdAt: nowIso(),
       updatedAt: nowIso(),
+      lastMoveAt: null,
       history: [],
       state: initial
     };
@@ -33,6 +34,29 @@ export class GameSessionStore {
 
   getSession(sessionId) {
     return this.sessions.get(sessionId) || null;
+  }
+
+  getSessionSnapshot(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return { ok: false, code: 'SESSION_NOT_FOUND', message: '对局不存在' };
+    }
+
+    return {
+      ok: true,
+      session: {
+        sessionId: session.sessionId,
+        status: session.status,
+        difficulty: session.difficulty,
+        moveCount: session.moveCount,
+        undoRemaining: session.undoRemaining,
+        turn: session.state.turn,
+        winner: session.state.winner,
+        lastMoveAt: session.lastMoveAt,
+        updatedAt: session.updatedAt,
+        board: session.state.board
+      }
+    };
   }
 
   listSessions() {
@@ -51,10 +75,16 @@ export class GameSessionStore {
       return { ok: false, code: 'SESSION_NOT_FOUND', message: '对局不存在' };
     }
 
+    if (session.status !== 'playing') {
+      return { ok: false, code: 'SESSION_NOT_PLAYING', message: '对局状态不可落子' };
+    }
+
     const snapshot = {
       state: JSON.parse(JSON.stringify(session.state)),
       moveCount: session.moveCount,
-      undoRemaining: session.undoRemaining
+      undoRemaining: session.undoRemaining,
+      status: session.status,
+      lastMoveAt: session.lastMoveAt
     };
 
     const { verdict, nextState } = this.ruleEngine.applyMove(session.state, move);
@@ -63,12 +93,45 @@ export class GameSessionStore {
     session.history.push(snapshot);
     session.state = nextState;
     session.moveCount += 1;
+    session.lastMoveAt = nowIso();
     session.updatedAt = nowIso();
 
     return {
       ok: true,
       verdict,
-      session
+      session,
+      meta: {
+        sessionId: session.sessionId,
+        moveCount: session.moveCount,
+        nextTurn: session.state.turn,
+        status: session.status,
+        updatedAt: session.updatedAt
+      }
+    };
+  }
+
+  updateSessionStatus(sessionId, status) {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      return { ok: false, code: 'SESSION_NOT_FOUND', message: '对局不存在' };
+    }
+
+    const allowed = new Set(['playing', 'paused', 'finished']);
+    if (!allowed.has(status)) {
+      return { ok: false, code: 'INVALID_STATUS', message: '状态非法' };
+    }
+
+    session.status = status;
+    session.updatedAt = nowIso();
+
+    return {
+      ok: true,
+      session,
+      meta: {
+        sessionId: session.sessionId,
+        status: session.status,
+        updatedAt: session.updatedAt
+      }
     };
   }
 
@@ -90,6 +153,8 @@ export class GameSessionStore {
     session.state = previous.state;
     session.moveCount = previous.moveCount;
     session.undoRemaining -= 1;
+    session.status = previous.status;
+    session.lastMoveAt = previous.lastMoveAt;
     session.updatedAt = nowIso();
 
     return { ok: true, session };
