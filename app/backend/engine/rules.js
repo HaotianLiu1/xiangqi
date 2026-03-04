@@ -1,8 +1,8 @@
 import { cloneBoard, INITIAL_BOARD, isInsideBoard, PIECE_TYPE } from './board.js';
 
 /**
- * 规则引擎（V3）
- * - 已实现：兵、车、炮、马 合法走子校验
+ * 规则引擎（V4）
+ * - 已实现：兵、车、炮、马、象、士、将 合法走子校验
  * - 已实现：将军检测 V1（含帅将照面）
  */
 export class XiangqiRuleEngine {
@@ -39,6 +39,14 @@ export class XiangqiRuleEngine {
   isPathClearStraight(board, from, to) {
     const between = this.countPiecesBetween(board, from, to);
     return between === 0;
+  }
+
+  isInsidePalace(side, x, y) {
+    const xOk = x >= 3 && x <= 5;
+    if (!xOk) return false;
+
+    if (side === 'red') return y >= 7 && y <= 9;
+    return y >= 0 && y <= 2;
   }
 
   validateSoldierMove(movingPiece, from, to) {
@@ -123,6 +131,60 @@ export class XiangqiRuleEngine {
     return { ok: true };
   }
 
+  validateElephantMove(board, movingPiece, from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+
+    if (Math.abs(dx) !== 2 || Math.abs(dy) !== 2) {
+      return { ok: false, code: 'INVALID_ELEPHANT_SHAPE', message: '象/相走田字两格斜线' };
+    }
+
+    const eye = { x: from.x + dx / 2, y: from.y + dy / 2 };
+    if (this.getPieceAt(board, eye.x, eye.y)) {
+      return { ok: false, code: 'ELEPHANT_EYE_BLOCKED', message: '象眼被塞' };
+    }
+
+    if (movingPiece.side === 'red' && to.y <= 4) {
+      return { ok: false, code: 'ELEPHANT_CROSS_RIVER', message: '红相不可过河' };
+    }
+
+    if (movingPiece.side === 'black' && to.y >= 5) {
+      return { ok: false, code: 'ELEPHANT_CROSS_RIVER', message: '黑象不可过河' };
+    }
+
+    return { ok: true };
+  }
+
+  validateAdvisorMove(movingPiece, from, to) {
+    const dx = Math.abs(to.x - from.x);
+    const dy = Math.abs(to.y - from.y);
+
+    if (!(dx === 1 && dy === 1)) {
+      return { ok: false, code: 'INVALID_ADVISOR_SHAPE', message: '士/仕走斜一格' };
+    }
+
+    if (!this.isInsidePalace(movingPiece.side, to.x, to.y)) {
+      return { ok: false, code: 'ADVISOR_OUT_OF_PALACE', message: '士/仕不可出九宫' };
+    }
+
+    return { ok: true };
+  }
+
+  validateGeneralMove(movingPiece, from, to) {
+    const dx = Math.abs(to.x - from.x);
+    const dy = Math.abs(to.y - from.y);
+
+    if (dx + dy !== 1) {
+      return { ok: false, code: 'INVALID_GENERAL_STEP', message: '将/帅每次只能走一步直线' };
+    }
+
+    if (!this.isInsidePalace(movingPiece.side, to.x, to.y)) {
+      return { ok: false, code: 'GENERAL_OUT_OF_PALACE', message: '将/帅不可出九宫' };
+    }
+
+    return { ok: true };
+  }
+
   validateByPieceType(board, movingPiece, from, to, targetPiece) {
     if (movingPiece.type === PIECE_TYPE.SOLDIER) {
       return this.validateSoldierMove(movingPiece, from, to);
@@ -138,6 +200,18 @@ export class XiangqiRuleEngine {
 
     if (movingPiece.type === PIECE_TYPE.KNIGHT) {
       return this.validateKnightMove(board, from, to);
+    }
+
+    if (movingPiece.type === PIECE_TYPE.ELEPHANT) {
+      return this.validateElephantMove(board, movingPiece, from, to);
+    }
+
+    if (movingPiece.type === PIECE_TYPE.ADVISOR) {
+      return this.validateAdvisorMove(movingPiece, from, to);
+    }
+
+    if (movingPiece.type === PIECE_TYPE.GENERAL) {
+      return this.validateGeneralMove(movingPiece, from, to);
     }
 
     return {
@@ -213,7 +287,8 @@ export class XiangqiRuleEngine {
       PIECE_TYPE.SOLDIER,
       PIECE_TYPE.ROOK,
       PIECE_TYPE.CANNON,
-      PIECE_TYPE.KNIGHT
+      PIECE_TYPE.KNIGHT,
+      PIECE_TYPE.GENERAL
     ]);
 
     if (!supportedThreatTypes.has(piece.type)) return false;
@@ -231,7 +306,7 @@ export class XiangqiRuleEngine {
 
   /**
    * 将军检测 V1
-   * - 检测兵/车/炮/马对将的直接威胁
+   * - 检测兵/车/炮/马/将对将的直接威胁
    * - 检测“帅将照面”
    */
   detectCheck(state, side) {

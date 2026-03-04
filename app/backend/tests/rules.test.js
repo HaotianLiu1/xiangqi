@@ -167,6 +167,65 @@ test('detectCheck: rook threatening general should be detected as check', () => 
   assert.equal(result.attackers[0].pieceType, PIECE_TYPE.ROOK);
 });
 
+test('elephant: cannot cross river', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [{ id: 'r-ele', side: 'red', type: PIECE_TYPE.ELEPHANT, x: 2, y: 5 }],
+    turn: 'red'
+  });
+
+  const verdict = engine.validateMove(state, {
+    from: { x: 2, y: 5 },
+    to: { x: 4, y: 3 }
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'ELEPHANT_CROSS_RIVER');
+});
+
+test('advisor: must stay in palace', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [{ id: 'r-adv', side: 'red', type: PIECE_TYPE.ADVISOR, x: 4, y: 8 }],
+    turn: 'red'
+  });
+
+  const verdict = engine.validateMove(state, {
+    from: { x: 4, y: 8 },
+    to: { x: 2, y: 6 }
+  });
+
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'INVALID_ADVISOR_SHAPE');
+
+  const verdict2 = engine.validateMove(state, {
+    from: { x: 4, y: 8 },
+    to: { x: 3, y: 7 }
+  });
+  assert.equal(verdict2.ok, true);
+});
+
+test('general: must stay in palace and move one orthogonal step', () => {
+  const engine = new XiangqiRuleEngine();
+  const state = makeState({
+    board: [{ id: 'r-gen', side: 'red', type: PIECE_TYPE.GENERAL, x: 4, y: 9 }],
+    turn: 'red'
+  });
+
+  const badStep = engine.validateMove(state, {
+    from: { x: 4, y: 9 },
+    to: { x: 4, y: 7 }
+  });
+  assert.equal(badStep.ok, false);
+  assert.equal(badStep.code, 'INVALID_GENERAL_STEP');
+
+  const outPalace = engine.validateMove(state, {
+    from: { x: 4, y: 9 },
+    to: { x: 6, y: 9 }
+  });
+  assert.equal(outPalace.ok, false);
+});
+
 test('detectCheck: facing generals should be detected', () => {
   const engine = new XiangqiRuleEngine();
   const state = makeState({
