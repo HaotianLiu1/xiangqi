@@ -62,6 +62,7 @@ const state = {
   history: [],
   moveCount: 0,
   selectedId: null,
+  selectedKind: 'other',
   legalMoves: [],
   lastMovedId: null,
   lastMoveTarget: null,
@@ -95,9 +96,10 @@ function setStatus(message, type = 'ok') {
   statusEl.style.color = '#166534';
 }
 
-function setSelected(selectedId = null, legalMoves = []) {
+function setSelected(selectedId = null, legalMoves = [], selectedKind = 'other') {
   state.selectedId = selectedId;
   state.legalMoves = legalMoves;
+  state.selectedKind = selectedKind;
 }
 
 function setIllegalMoveStatus(extra = '') {
@@ -133,9 +135,72 @@ function getCurrentSideText() {
   return state.turn === 'red' ? '红方' : '黑方';
 }
 
+function getPieceKind(piece) {
+  if (!piece) return 'other';
+  if (['將', '帥'].includes(piece.text)) return 'king';
+  if (['士', '仕'].includes(piece.text)) return 'advisor';
+  if (['象', '相'].includes(piece.text)) return 'elephant';
+  return 'other';
+}
+
+function isInPalace(side, x, y) {
+  const inX = x >= 3 && x <= 5;
+  if (!inX) return false;
+  return side === 'red' ? y >= 7 && y <= 9 : y >= 0 && y <= 2;
+}
+
+function isElephantSide(side, y) {
+  return side === 'red' ? y >= 5 : y <= 4;
+}
+
+function canOccupy(piece, x, y) {
+  if (!inBoard(x, y)) return false;
+  const occupant = findPieceAt(x, y);
+  return !occupant || occupant.side !== piece.side;
+}
+
 function getSimpleLegalMoves(pieceId) {
   const piece = state.pieces.find((p) => p.id === pieceId);
   if (!piece) return [];
+
+  const kind = getPieceKind(piece);
+
+  if (kind === 'king') {
+    const kingSteps = [
+      { x: piece.x + 1, y: piece.y },
+      { x: piece.x - 1, y: piece.y },
+      { x: piece.x, y: piece.y + 1 },
+      { x: piece.x, y: piece.y - 1 }
+    ];
+
+    return kingSteps.filter((pos) => isInPalace(piece.side, pos.x, pos.y) && canOccupy(piece, pos.x, pos.y));
+  }
+
+  if (kind === 'advisor') {
+    const advisorSteps = [
+      { x: piece.x + 1, y: piece.y + 1 },
+      { x: piece.x + 1, y: piece.y - 1 },
+      { x: piece.x - 1, y: piece.y + 1 },
+      { x: piece.x - 1, y: piece.y - 1 }
+    ];
+
+    return advisorSteps.filter((pos) => isInPalace(piece.side, pos.x, pos.y) && canOccupy(piece, pos.x, pos.y));
+  }
+
+  if (kind === 'elephant') {
+    const elephantSteps = [
+      { x: piece.x + 2, y: piece.y + 2, eyeX: piece.x + 1, eyeY: piece.y + 1 },
+      { x: piece.x + 2, y: piece.y - 2, eyeX: piece.x + 1, eyeY: piece.y - 1 },
+      { x: piece.x - 2, y: piece.y + 2, eyeX: piece.x - 1, eyeY: piece.y + 1 },
+      { x: piece.x - 2, y: piece.y - 2, eyeX: piece.x - 1, eyeY: piece.y - 1 }
+    ];
+
+    return elephantSteps.filter((pos) => {
+      if (!isElephantSide(piece.side, pos.y)) return false;
+      if (!canOccupy(piece, pos.x, pos.y)) return false;
+      return !findPieceAt(pos.eyeX, pos.eyeY);
+    });
+  }
 
   const candidates = [
     { x: piece.x + 1, y: piece.y },
@@ -144,11 +209,7 @@ function getSimpleLegalMoves(pieceId) {
     { x: piece.x, y: piece.y - 1 }
   ];
 
-  return candidates.filter((pos) => {
-    if (!inBoard(pos.x, pos.y)) return false;
-    const occupant = findPieceAt(pos.x, pos.y);
-    return !occupant || occupant.side !== piece.side;
-  });
+  return candidates.filter((pos) => canOccupy(piece, pos.x, pos.y));
 }
 
 function buildBoardStatic() {
@@ -215,7 +276,8 @@ function renderLegalMoves() {
   state.legalMoves.forEach((pos, index) => {
     const marker = document.createElement('div');
     const isTarget = targetKey && targetKey === posKey(pos.x, pos.y);
-    marker.className = `legal-marker${isTarget ? ' move-target' : ''}`;
+    const kindClass = state.selectedKind && state.selectedKind !== 'other' ? ` kind-${state.selectedKind}` : '';
+    marker.className = `legal-marker${kindClass}${isTarget ? ' move-target' : ''}`;
     marker.style.left = `${(pos.x / (BOARD_COLS - 1)) * 100}%`;
     marker.style.top = `${(pos.y / (BOARD_ROWS - 1)) * 100}%`;
     marker.style.animationDelay = `${index * 35}ms`;
@@ -233,7 +295,8 @@ function renderPieces() {
     el.type = 'button';
     const selectedClass = piece.id === state.selectedId ? ' selected' : '';
     const movedClass = piece.id === state.lastMovedId ? ' moved' : '';
-    el.className = `piece ${piece.side}${selectedClass}${movedClass}`;
+    const selectedKindClass = piece.id === state.selectedId ? ` selected-${state.selectedKind}` : '';
+    el.className = `piece ${piece.side}${selectedClass}${selectedKindClass}${movedClass}`;
     el.textContent = piece.text;
     el.style.left = `${(piece.x / (BOARD_COLS - 1)) * 100}%`;
     el.style.top = `${(piece.y / (BOARD_ROWS - 1)) * 100}%`;
@@ -371,7 +434,8 @@ function onPieceClick(pieceId) {
   }
 
   const legalMoves = getSimpleLegalMoves(pieceId);
-  setSelected(pieceId, legalMoves);
+  const selectedKind = getPieceKind(piece);
+  setSelected(pieceId, legalMoves, selectedKind);
   renderPieces();
   setStatus(`已选中${piece.text}，可落点 ${legalMoves.length} 个，请点击高亮点位落子。`);
 }

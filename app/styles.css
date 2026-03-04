@@ -287,6 +287,18 @@ button.secondary { background: var(--btn-secondary); }
   animation: selected-breathe 1.2s ease-in-out infinite;
 }
 
+.piece.selected-king {
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.55);
+}
+
+.piece.selected-advisor {
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.5);
+}
+
+.piece.selected-elephant {
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.55);
+}
+
 @keyframes selected-breathe {
   0%, 100% { box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.34); }
   50% { box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.16); }
@@ -307,6 +319,21 @@ button.secondary { background: var(--btn-secondary); }
 .legal-marker.move-target {
   background: rgba(16, 185, 129, 0.5);
   border-color: rgba(5, 150, 105, 0.8);
+}
+
+.legal-marker.kind-king {
+  background: rgba(251, 146, 60, 0.35);
+  border-color: rgba(194, 65, 12, 0.7);
+}
+
+.legal-marker.kind-advisor {
+  background: rgba(168, 85, 247, 0.35);
+  border-color: rgba(107, 33, 168, 0.72);
+}
+
+.legal-marker.kind-elephant {
+  background: rgba(45, 212, 191, 0.35);
+  border-color: rgba(13, 148, 136, 0.72);
 }
 
 @media (max-width: 640px) {
